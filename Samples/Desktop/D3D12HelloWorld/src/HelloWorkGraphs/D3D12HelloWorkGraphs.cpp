@@ -23,6 +23,7 @@
 #include "dxcapi.h"
 #include "d3d12.h"
 #include "d3dx12.h"
+#include <dxgi1_6.h>
 
 extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 613; }
 extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8".\\D3D12\\"; }
@@ -30,13 +31,16 @@ extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8".\\D3D12
 using namespace std;
 LPCWSTR g_File = L"D3D12HelloWorkGraphs.hlsl";
 
+// use a warp device instead of a hardware device
+bool g_useWarpDevice = false;
+
 //=================================================================================================================================
 // Helper / setup code, not specific to work graphs
 // Look for "Start of interesting code" further below.
 //=================================================================================================================================
 
-#define PRINT(text) cout << text << "\n" << flush; 
-#define VERIFY_SUCCEEDED(hr) {if(FAILED(hr)) {PRINT("Error at: " << __FILE__ << ", line: " << __LINE__ << hex << hr); throw E_FAIL;} }
+#define PRINT(text) cout << (char*)text << "\n" << flush; 
+#define VERIFY_SUCCEEDED(hr) {HRESULT hrLocal = hr; if(FAILED(hrLocal)) {PRINT("Error at: " << __FILE__ << ", line: " << __LINE__ << ", HRESULT: 0x" << hex << hrLocal); throw E_FAIL;} }
 
 //=================================================================================================================================
 class D3DContext
@@ -176,7 +180,20 @@ void InitDeviceAndContext(D3DContext& D3D)
 
     D3D_FEATURE_LEVEL FL = D3D_FEATURE_LEVEL_11_0;
     CComPtr<ID3D12Device> spDevice;
-    VERIFY_SUCCEEDED(D3D12CreateDevice(NULL, FL, IID_PPV_ARGS(&spDevice)));
+
+    if (g_useWarpDevice)
+    {
+        CComPtr<IDXGIFactory4> factory;
+        VERIFY_SUCCEEDED(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
+
+        CComPtr<IDXGIAdapter> warpAdapter;
+        VERIFY_SUCCEEDED(factory->EnumWarpAdapter(IID_PPV_ARGS(&warpAdapter)));
+        VERIFY_SUCCEEDED(D3D12CreateDevice(warpAdapter, FL, IID_PPV_ARGS(&spDevice)));
+    }
+    else
+    {
+        VERIFY_SUCCEEDED(D3D12CreateDevice(NULL, FL, IID_PPV_ARGS(&spDevice)));
+    }
     D3D.spDevice = spDevice;
 
     VERIFY_SUCCEEDED(D3D.spDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&D3D.spFence)));

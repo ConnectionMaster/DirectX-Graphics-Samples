@@ -22,6 +22,7 @@
 #include "dxcapi.h"
 #include "d3d12.h"
 #include "d3dx12.h"
+#include <dxgi1_6.h>
 
 extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 613; }
 extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = u8".\\D3D12\\"; }
@@ -31,6 +32,9 @@ const char* g_File = "D3D12WorkGraphsSandbox.hlsl";
 wstring g_wFile;
 bool g_bUseCollections = false;
 
+// use a warp device instead of a hardware device
+bool g_useWarpDevice = false;
+
 //=================================================================================================================================
 // Helper / setup code, not specific to work graphs
 // Look for "Start of interesting code" further below.
@@ -38,13 +42,13 @@ bool g_bUseCollections = false;
 
 //=================================================================================================================================
 // Print with flush to get the text out in case there's delays in app
-#define PRINT(text) cout << text << "\n" << flush; 
+#define PRINT(text) cout << (char*)text << "\n" << flush; 
 #define PRINT_NO_NEWLINE(text) cout << text << flush; 
 
 //=================================================================================================================================
 void Analyze(HRESULT hr)
 {
-    PRINT("HRESULT == ");
+    PRINT_NO_NEWLINE("HRESULT == ");
     switch (hr)
     {
     case DXGI_ERROR_DEVICE_HUNG:
@@ -54,10 +58,10 @@ void Analyze(HRESULT hr)
         PRINT("DXGI_ERROR_DEVICE_REMOVED");
         break;
     default:
-        PRINT(hex << hr);
+        PRINT("0x" << hex << hr);
     }
 }
-#define VERIFY_SUCCEEDED(hr) {if(FAILED(hr)) {PRINT("Error at: " << __FILE__ << ", line: " << __LINE__ ); Analyze(hr); throw E_FAIL;} }
+#define VERIFY_SUCCEEDED(hr) {HRESULT hrLocal = hr; if(FAILED(hrLocal)) {PRINT_NO_NEWLINE("Error at: " << __FILE__ << ", line: " << __LINE__ << ", "); Analyze(hrLocal); throw E_FAIL;} }
 
 //=================================================================================================================================
 class D3DContext
@@ -213,7 +217,20 @@ void InitDeviceAndContext(D3DContext& D3D)
 
     D3D_FEATURE_LEVEL FL = D3D_FEATURE_LEVEL_11_0;
     CComPtr<ID3D12Device> spDevice;
-    VERIFY_SUCCEEDED(D3D12CreateDevice(NULL, FL, IID_PPV_ARGS(&spDevice)));
+
+    if (g_useWarpDevice)
+    {
+        CComPtr<IDXGIFactory4> factory;
+        VERIFY_SUCCEEDED(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
+
+        CComPtr<IDXGIAdapter> warpAdapter;
+        VERIFY_SUCCEEDED(factory->EnumWarpAdapter(IID_PPV_ARGS(&warpAdapter)));
+        VERIFY_SUCCEEDED(D3D12CreateDevice(warpAdapter, FL, IID_PPV_ARGS(&spDevice)));
+    }
+    else
+    {
+        VERIFY_SUCCEEDED(D3D12CreateDevice(NULL, FL, IID_PPV_ARGS(&spDevice)));
+    }
     D3D.spDevice = spDevice;
 
     D3D.spInfoQueue = spDevice;
